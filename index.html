@@ -13,7 +13,7 @@
           <p class="eyebrow">Goodies staff tool</p>
           <h1 id="page-title">Goodies Pricing Calculator</h1>
           <p class="subtitle">
-            A safer boutique pricing sheet that adds damage, hidden Aruba costs, and a margin buffer before choosing a Goodies price tier.
+            A safer boutique pricing sheet that separates the no-loss floor from customer-friendly boutique price suggestions.
           </p>
         </div>
         <div class="summary-card" aria-live="polite">
@@ -152,6 +152,10 @@
               <span>Protected cost / sellable unit</span>
               <strong id="protectedCost">AWG 0.00</strong>
             </article>
+            <article class="floor-cost">
+              <span>No-loss floor price</span>
+              <strong id="floorPrice">AWG 0.00</strong>
+            </article>
             <article>
               <span>Expected sellable quantity</span>
               <strong id="sellableQty">0</strong>
@@ -177,6 +181,12 @@
             <span>Suggested Promotion</span>
             <strong id="promotion">Enter product details</strong>
             <p id="promotionNote">Fill in product cost and quantity to get a promotion suggestion.</p>
+          </div>
+
+          <div class="decision-box">
+            <span>Buying Decision</span>
+            <strong id="buyingDecision">Enter product cost</strong>
+            <p id="buyingDecisionNote">The app will flag whether the item can be priced safely without becoming too expensive.</p>
           </div>
 
           <div class="copy-status" id="copyStatus" role="status" aria-live="polite"></div>

@@ -89,6 +89,7 @@ h2 {
 .summary-card,
 .panel,
 .promotion-box,
+.decision-box,
 .cost-grid article {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.9);
@@ -106,6 +107,7 @@ h2 {
 
 .summary-label,
 .promotion-box span,
+.decision-box span,
 .cost-grid span,
 label span {
   color: var(--muted);
@@ -333,8 +335,13 @@ select:focus {
   background: #f6fbf8 !important;
 }
 
-.protected-cost strong {
+.protected-cost strong,
+.floor-cost strong {
   color: var(--success);
+}
+
+.floor-cost {
+  border-color: rgba(47, 117, 89, 0.24) !important;
 }
 
 .table-wrap {
@@ -373,7 +380,8 @@ td strong {
   color: var(--success);
 }
 
-.promotion-box {
+.promotion-box,
+.decision-box {
   display: grid;
   gap: 8px;
   margin-top: 18px;
@@ -382,11 +390,18 @@ td strong {
   box-shadow: none;
 }
 
-.promotion-box strong {
+.decision-box {
+  border-color: rgba(47, 117, 89, 0.28);
+  background: #f6fbf8;
+}
+
+.promotion-box strong,
+.decision-box strong {
   font-size: 1.25rem;
 }
 
 .promotion-box p,
+.decision-box p,
 .copy-status {
   margin: 0;
   color: var(--muted);

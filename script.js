@@ -1,10 +1,17 @@
 const priceTiers = [5, 7.5, 10, 12.5, 15, 17.5, 20, 25, 30, 35, 45, 55, 65, 75, 95, 125, 150, 180, 220];
 
-const multipliers = [
-  { label: "Minimum safe price", value: 2.1 },
-  { label: "Recommended price", value: 2.6 },
-  { label: "Boutique price", value: 3.1 },
-  { label: "Premium price", value: 3.6 },
+const marginProfiles = {
+  Normal: { min: 0.32, recommended: 0.42, boutique: 0.5, premium: 0.56 },
+  Limited: { min: 0.36, recommended: 0.48, boutique: 0.55, premium: 0.6 },
+  Hot: { min: 0.38, recommended: 0.52, boutique: 0.58, premium: 0.63 },
+  Premium: { min: 0.42, recommended: 0.56, boutique: 0.62, premium: 0.66 },
+};
+
+const pricePlans = [
+  { label: "Minimum no-loss price", key: "min" },
+  { label: "Recommended price", key: "recommended" },
+  { label: "Boutique price", key: "boutique" },
+  { label: "Premium price", key: "premium" },
 ];
 
 const fields = {
@@ -29,10 +36,13 @@ const output = {
   rmbLanded: document.querySelector("#rmbLanded"),
   awgLanded: document.querySelector("#awgLanded"),
   protectedCost: document.querySelector("#protectedCost"),
+  floorPrice: document.querySelector("#floorPrice"),
   sellableQty: document.querySelector("#sellableQty"),
   priceRows: document.querySelector("#priceRows"),
   promotion: document.querySelector("#promotion"),
   promotionNote: document.querySelector("#promotionNote"),
+  buyingDecision: document.querySelector("#buyingDecision"),
+  buyingDecisionNote: document.querySelector("#buyingDecisionNote"),
   formAlert: document.querySelector("#formAlert"),
   copyStatus: document.querySelector("#copyStatus"),
   photoPreview: document.querySelector("#photoPreview"),
@@ -63,6 +73,26 @@ function roundUpTier(value) {
   }
 
   return Math.ceil(value / 10) * 10;
+}
+
+function minimumProfitFor(cost) {
+  if (cost < 5) {
+    return 2;
+  }
+
+  if (cost <= 15) {
+    return 4;
+  }
+
+  if (cost <= 35) {
+    return 7;
+  }
+
+  return 10;
+}
+
+function priceForMargin(cost, margin) {
+  return cost / (1 - margin);
 }
 
 function getRecommendation(cost) {
@@ -139,6 +169,48 @@ function getPromotion(cost, recommendedPrice, quantity, rarity) {
   return {
     label: "Limited stock, no discount",
     note: "The current cost or stock level is better suited to straight pricing.",
+  };
+}
+
+function getBuyingDecision(cost, minimumPrice, recommendedPrice, quantity) {
+  if (cost <= 0) {
+    return {
+      label: "Enter product cost",
+      note: "Add the RMB unit cost first. Shipping defaults are ignored until the product has a real cost.",
+    };
+  }
+
+  if (minimumPrice > 220 || cost > 125) {
+    return {
+      label: "Pre-order only",
+      note: "The protected cost is too high for the current Goodies tiers. Only buy after a customer confirms.",
+    };
+  }
+
+  if (recommendedPrice >= 125 || cost > 55) {
+    return {
+      label: "Buy very carefully",
+      note: "This can avoid loss, but it needs premium positioning or very limited stock.",
+    };
+  }
+
+  if (quantity <= 3) {
+    return {
+      label: "Small test batch",
+      note: "The price is safe, but low quantity leaves little room for bundles or mistakes.",
+    };
+  }
+
+  if (recommendedPrice <= 35) {
+    return {
+      label: "Safe to test",
+      note: "The no-loss price is still friendly for customers, so this is a good trial product.",
+    };
+  }
+
+  return {
+    label: "Safe if presented well",
+    note: "The product can be profitable, but the display and story need to support the price.",
   };
 }
 
@@ -232,6 +304,7 @@ function buildSummary(productName, category, rarity, costs, priceData, promotion
     `Base RMB cost/unit: ${money(costs.rmbLanded, "RMB")}`,
     `Base AWG cost/unit: ${money(costs.awgLanded)}`,
     `Protected cost/sellable unit: ${money(costs.protectedCost)}`,
+    `No-loss floor price: ${money(costs.floorPrice)}`,
     `Expected sellable quantity: ${costs.sellableQty}`,
     `Damage reserve: ${(costs.damageRate * 100).toFixed(0)}%`,
     `Hidden cost buffer: ${(costs.hiddenCostRate * 100).toFixed(0)}%`,
@@ -273,7 +346,9 @@ function calculate() {
 
   const productName = fields.productName.value.trim();
   const category = fields.category.value.trim();
-  const hasCosts = protectedCost > 0 && awgLanded > 0;
+  const hasCosts = numberValue(fields.rmbUnitCost) > 0 && protectedCost > 0 && awgLanded > 0;
+  const profile = marginProfiles[rarity] || marginProfiles.Normal;
+  const floorPrice = hasCosts ? roundUpTier(protectedCost) : 0;
 
   output.productMeta.textContent = [productName || "Untitled product", category || "No category", rarity]
     .filter(Boolean)
@@ -281,14 +356,18 @@ function calculate() {
   output.rmbLanded.textContent = money(hasCosts ? rmbLanded : 0, "RMB");
   output.awgLanded.textContent = money(hasCosts ? awgLanded : 0);
   output.protectedCost.textContent = money(hasCosts ? protectedCost : 0);
+  output.floorPrice.textContent = money(floorPrice);
   output.sellableQty.textContent = hasCosts ? `${sellableQty} of ${quantity}` : "0";
 
-  const priceData = multipliers.map((item) => {
-    const tierPrice = roundUpTier(protectedCost * item.value);
+  const priceData = pricePlans.map((item) => {
+    const marginTarget = profile[item.key];
+    const rawPrice = Math.max(priceForMargin(protectedCost, marginTarget), protectedCost + minimumProfitFor(protectedCost));
+    const tierPrice = roundUpTier(rawPrice);
     const profit = tierPrice - protectedCost;
     const margin = tierPrice > 0 ? (profit / tierPrice) * 100 : 0;
     return {
       ...item,
+      marginTarget,
       price: hasCosts ? tierPrice : 0,
       profit: hasCosts ? profit : 0,
       margin: hasCosts ? margin : 0,
@@ -310,19 +389,24 @@ function calculate() {
     )
     .join("");
 
-  const recommendation = getRecommendation(protectedCost);
+  const activeCost = hasCosts ? protectedCost : 0;
+  const recommendation = getRecommendation(activeCost);
   const recommendedPrice = priceData[1]?.price || 0;
-  const promotion = getPromotion(protectedCost, recommendedPrice, sellableQty, rarity);
+  const minimumPrice = priceData[0]?.price || 0;
+  const promotion = getPromotion(activeCost, recommendedPrice, sellableQty, rarity);
+  const buyingDecision = getBuyingDecision(activeCost, minimumPrice, recommendedPrice, sellableQty);
 
   output.recommendationLabel.textContent = recommendation.label;
   output.recommendationNote.textContent = recommendation.note;
   output.promotion.textContent = promotion.label;
   output.promotionNote.textContent = promotion.note;
+  output.buyingDecision.textContent = buyingDecision.label;
+  output.buyingDecisionNote.textContent = buyingDecision.note;
   latestSummary = buildSummary(
     productName,
     category,
     rarity,
-    { rmbLanded, awgLanded, protectedCost, sellableQty, damageRate, hiddenCostRate },
+    { rmbLanded, awgLanded, protectedCost, floorPrice, sellableQty, damageRate, hiddenCostRate },
     priceData,
     promotion,
   );
