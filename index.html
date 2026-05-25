@@ -71,6 +71,7 @@
             <label>
               <span>Quantity</span>
               <input id="quantity" type="number" min="1" step="1" inputmode="numeric" placeholder="12" />
+              <small class="field-note">Shipping, tax, and shared costs are automatically divided across all units.</small>
             </label>
 
             <label>
@@ -80,6 +81,16 @@
                 <option>Limited</option>
                 <option>Hot</option>
                 <option>Premium</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Pricing Mode</span>
+              <select id="pricingMode">
+                <option>Impulse Item</option>
+                <option>Gift Item</option>
+                <option>Boutique Item</option>
+                <option>Premium Collectible</option>
               </select>
             </label>
 

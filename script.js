@@ -1,10 +1,10 @@
 const priceTiers = [5, 7.5, 10, 12.5, 15, 17.5, 20, 25, 30, 35, 45, 55, 65, 75, 95, 125, 150, 180, 220];
 
-const marginProfiles = {
-  Normal: { min: 0.32, recommended: 0.42, boutique: 0.5, premium: 0.56 },
-  Limited: { min: 0.36, recommended: 0.48, boutique: 0.55, premium: 0.6 },
-  Hot: { min: 0.38, recommended: 0.52, boutique: 0.58, premium: 0.63 },
-  Premium: { min: 0.42, recommended: 0.56, boutique: 0.62, premium: 0.66 },
+const pricingModeMultipliers = {
+  "Impulse Item": { min: 2.0, recommended: 2.5, boutique: 2.8, premium: 3.0 },
+  "Gift Item": { min: 2.3, recommended: 2.8, boutique: 3.2, premium: 3.5 },
+  "Boutique Item": { min: 2.6, recommended: 3.2, boutique: 3.8, premium: 4.2 },
+  "Premium Collectible": { min: 3.0, recommended: 3.8, boutique: 4.5, premium: 5.0 },
 };
 
 const pricePlans = [
@@ -24,6 +24,7 @@ const fields = {
   customsTax: document.querySelector("#customsTax"),
   exchangeRate: document.querySelector("#exchangeRate"),
   rarity: document.querySelector("#rarity"),
+  pricingMode: document.querySelector("#pricingMode"),
   damageRate: document.querySelector("#damageRate"),
   hiddenCostRate: document.querySelector("#hiddenCostRate"),
   safetyCushion: document.querySelector("#safetyCushion"),
@@ -65,34 +66,25 @@ function money(value, currency = "AWG") {
   return `${currency} ${value.toFixed(2)}`;
 }
 
+function roundToNearestTier(value) {
+  if (value <= 0) {
+    return 0;
+  }
+
+  if (value > priceTiers[priceTiers.length - 1]) {
+    return Math.ceil(value / 10) * 10;
+  }
+
+  return priceTiers.reduce((nearest, tier) => {
+    const currentGap = Math.abs(tier - value);
+    const nearestGap = Math.abs(nearest - value);
+    return currentGap < nearestGap ? tier : nearest;
+  }, priceTiers[0]);
+}
+
 function roundUpTier(value) {
   const tier = priceTiers.find((price) => price >= value);
-
-  if (tier) {
-    return tier;
-  }
-
-  return Math.ceil(value / 10) * 10;
-}
-
-function minimumProfitFor(cost) {
-  if (cost < 5) {
-    return 2;
-  }
-
-  if (cost <= 15) {
-    return 4;
-  }
-
-  if (cost <= 35) {
-    return 7;
-  }
-
-  return 10;
-}
-
-function priceForMargin(cost, margin) {
-  return cost / (1 - margin);
+  return tier || Math.ceil(value / 10) * 10;
 }
 
 function getRecommendation(cost) {
@@ -294,13 +286,14 @@ function validateInputs(quantity, exchangeRate, damageRate, hiddenCostRate) {
   output.formAlert.textContent = messages.join(" ");
 }
 
-function buildSummary(productName, category, rarity, costs, priceData, promotion) {
+function buildSummary(productName, category, rarity, pricingMode, costs, priceData, promotion) {
   const title = productName || "Untitled product";
   const lines = [
     `Goodies Pricing Summary`,
     `Product: ${title}`,
     `Category: ${category || "No category"}`,
     `Rarity: ${rarity}`,
+    `Pricing mode: ${pricingMode}`,
     `Base RMB cost/unit: ${money(costs.rmbLanded, "RMB")}`,
     `Base AWG cost/unit: ${money(costs.awgLanded)}`,
     `Protected cost/sellable unit: ${money(costs.protectedCost)}`,
@@ -324,50 +317,53 @@ function buildSummary(productName, category, rarity, costs, priceData, promotion
 }
 
 function calculate() {
-  const quantity = Math.max(1, Math.floor(numberValue(fields.quantity)));
+  const enteredQty = Number(fields.quantity.value || 1);
+  const safeQty = Number.isFinite(enteredQty) ? Math.max(1, enteredQty) : 1;
+  const displayQty = Math.max(1, Math.floor(safeQty));
   const exchangeRate = numberValue(fields.exchangeRate) || 0.26;
   const rarity = fields.rarity.value;
+  const pricingMode = fields.pricingMode.value;
   const damageInput = numberValue(fields.damageRate);
   const hiddenInput = numberValue(fields.hiddenCostRate);
   const damageRate = clampPercent(damageInput, rarityDamageReserve(rarity));
   const hiddenCostRate = clampPercent(hiddenInput, 25);
   const safetyCushion = numberValue(fields.safetyCushion) || 2;
-  validateInputs(quantity, exchangeRate, damageRate, hiddenCostRate);
+  validateInputs(safeQty, exchangeRate, damageRate, hiddenCostRate);
 
-  const rmbLanded = numberValue(fields.rmbUnitCost) + numberValue(fields.chinaShipping) / quantity;
+  const rmbLanded = numberValue(fields.rmbUnitCost) + numberValue(fields.chinaShipping) / safeQty;
   const awgLanded =
     rmbLanded * exchangeRate +
-    numberValue(fields.internationalShipping) / quantity +
-    numberValue(fields.customsTax) / quantity;
-  const sellableQty = Math.max(1, Math.floor(quantity * (1 - damageRate)));
-  const totalBaseCost = awgLanded * quantity;
-  const baseCostPerSellableUnit = totalBaseCost / sellableQty;
-  const protectedCost = baseCostPerSellableUnit * (1 + hiddenCostRate) + safetyCushion;
+    numberValue(fields.internationalShipping) / safeQty +
+    numberValue(fields.customsTax) / safeQty;
+  const damageReserveCost = awgLanded * damageRate;
+  const hiddenCostCost = awgLanded * hiddenCostRate;
+  const protectedCost = awgLanded + damageReserveCost + hiddenCostCost + safetyCushion;
+  const sellableQty = Math.max(1, Math.floor(displayQty * (1 - damageRate)));
 
   const productName = fields.productName.value.trim();
   const category = fields.category.value.trim();
   const hasCosts = numberValue(fields.rmbUnitCost) > 0 && protectedCost > 0 && awgLanded > 0;
-  const profile = marginProfiles[rarity] || marginProfiles.Normal;
+  const multipliers = pricingModeMultipliers[pricingMode] || pricingModeMultipliers["Impulse Item"];
   const floorPrice = hasCosts ? roundUpTier(protectedCost) : 0;
 
-  output.productMeta.textContent = [productName || "Untitled product", category || "No category", rarity]
+  output.productMeta.textContent = [productName || "Untitled product", category || "No category", rarity, pricingMode]
     .filter(Boolean)
     .join(" / ");
   output.rmbLanded.textContent = money(hasCosts ? rmbLanded : 0, "RMB");
   output.awgLanded.textContent = money(hasCosts ? awgLanded : 0);
   output.protectedCost.textContent = money(hasCosts ? protectedCost : 0);
   output.floorPrice.textContent = money(floorPrice);
-  output.sellableQty.textContent = hasCosts ? `${sellableQty} of ${quantity}` : "0";
+  output.sellableQty.textContent = hasCosts ? `${sellableQty} of ${displayQty}` : "0";
 
   const priceData = pricePlans.map((item) => {
-    const marginTarget = profile[item.key];
-    const rawPrice = Math.max(priceForMargin(protectedCost, marginTarget), protectedCost + minimumProfitFor(protectedCost));
-    const tierPrice = roundUpTier(rawPrice);
+    const multiplier = multipliers[item.key];
+    const rawPrice = protectedCost * multiplier;
+    const tierPrice = roundToNearestTier(rawPrice);
     const profit = tierPrice - protectedCost;
     const margin = tierPrice > 0 ? (profit / tierPrice) * 100 : 0;
     return {
       ...item,
-      marginTarget,
+      multiplier,
       price: hasCosts ? tierPrice : 0,
       profit: hasCosts ? profit : 0,
       margin: hasCosts ? margin : 0,
@@ -406,6 +402,7 @@ function calculate() {
     productName,
     category,
     rarity,
+    pricingMode,
     { rmbLanded, awgLanded, protectedCost, floorPrice, sellableQty, damageRate, hiddenCostRate },
     priceData,
     promotion,
@@ -424,6 +421,7 @@ document.querySelector("#pricingForm").addEventListener("reset", () => {
     fields.damageRate.value = "12";
     fields.hiddenCostRate.value = "25";
     fields.safetyCushion.value = "2.00";
+    fields.pricingMode.value = "Impulse Item";
     calculate();
   }, 0);
 });
@@ -431,18 +429,19 @@ document.querySelector("#pricingForm").addEventListener("reset", () => {
 photoInput.addEventListener("change", handlePhotoUpload);
 removePhotoButton.addEventListener("click", clearPhoto);
 sampleButton.addEventListener("click", () => {
-  fields.productName.value = "Pop Mart blind box";
+  fields.productName.value = "Blind box keychain";
   fields.category.value = "Collectibles";
-  fields.rmbUnitCost.value = "39";
+  fields.rmbUnitCost.value = "15";
   fields.quantity.value = "12";
-  fields.chinaShipping.value = "28";
-  fields.internationalShipping.value = "22";
-  fields.customsTax.value = "6";
+  fields.chinaShipping.value = "10";
+  fields.internationalShipping.value = "18";
+  fields.customsTax.value = "4";
   fields.exchangeRate.value = "0.26";
-  fields.damageRate.value = "14";
-  fields.hiddenCostRate.value = "22";
+  fields.damageRate.value = "12";
+  fields.hiddenCostRate.value = "25";
   fields.safetyCushion.value = "2.00";
-  fields.rarity.value = "Hot";
+  fields.rarity.value = "Normal";
+  fields.pricingMode.value = "Impulse Item";
   calculate();
 });
 
